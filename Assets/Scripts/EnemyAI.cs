@@ -1,23 +1,30 @@
 using System.Collections;
 using UnityEngine;
+using UnityEngine.UI;
+using UnityEngine.AI;
+using TMPro;
 
 /// <summary>
-/// Basic enemy behavior: moves straight toward the player until within
-/// engage range, then stops and fires projectiles at intervals.
-/// No pathfinding/NavMesh — fine for primitive placeholder enemies (cubes/spheres)
-/// in an open room. Swap in a NavMeshAgent later if you add obstacles/cover.
+/// Enemy behavior using NavMeshAgent for pathfinding — moves toward the
+/// player around obstacles/walls instead of straight through them, then
+/// stops and fires once within engage range. Includes health/UI hookup.
+/// Requires: NavMeshAgent component on this object, and a baked NavMesh
+/// in the scene (add a Nav Mesh Surface component to your level and Bake).
 /// </summary>
 [RequireComponent(typeof(Collider))]
+[RequireComponent(typeof(NavMeshAgent))]
 public class EnemyAI : MonoBehaviour
 {
+    #region Variables
     [Header("Movement")]
-    [Tooltip("Units per second the enemy moves toward the player.")]
-    public float moveSpeed = 3f;
-
     [Tooltip("Distance at which the enemy stops advancing and starts shooting.")]
     public float engageRange = 8f;
 
-    [Tooltip("How fast the enemy rotates to face the player, in degrees/second.")]
+    [Tooltip("How often the agent recalculates its path to the player, in seconds. " +
+             "Lower = more responsive but more expensive.")]
+    public float pathUpdateInterval = 0.2f;
+
+    [Tooltip("How fast the enemy rotates to face the player once in engage range, in degrees/second.")]
     public float turnSpeed = 180f;
 
     [Header("Shooting")]
@@ -34,7 +41,21 @@ public class EnemyAI : MonoBehaviour
     [Tooltip("Leave empty to auto-find the object tagged 'Player' at Start.")]
     public Transform player;
 
+    [Header("Health")]
+    public float health = 100f;
+
+    [SerializeField] Slider healthBar;
+
+    private NavMeshAgent agent;
     private float fireCooldown;
+    private float pathUpdateCooldown;
+    #endregion
+
+#region Unity Lifecycle
+    private void Awake()
+    {
+        agent = GetComponent<NavMeshAgent>();
+    }
 
     private void Start()
     {
@@ -51,24 +72,39 @@ public class EnemyAI : MonoBehaviour
                                   "Tag your XR player reference object as 'Player'.");
             }
         }
+
+        if (healthBar != null)
+        {
+            healthBar.maxValue = health;
+            healthBar.value = health;
+        }
+
+        // Let the agent's stopping distance match engage range so it
+        // naturally halts at the right spot instead of overshooting.
+        agent.stoppingDistance = engageRange;
     }
 
     private void Update()
     {
-        if (player == null) return;
+        if (player == null || agent == null) return;
 
         float distanceToPlayer = Vector3.Distance(transform.position, player.position);
-    
-        Debug.Log($"{name}: Distance to player: {distanceToPlayer:F2}, Engage range: {engageRange}");
 
-        FacePlayer();
-
-        if (distanceToPlayer > engageRange)
+        // Re-path periodically rather than every single frame — cheaper,
+        // and the player rarely moves fast enough to need per-frame updates.
+        pathUpdateCooldown -= Time.deltaTime;
+        if (pathUpdateCooldown <= 0f)
         {
-            MoveTowardPlayer();
+            agent.SetDestination(player.position);
+            pathUpdateCooldown = pathUpdateInterval;
         }
-        else
+
+        if (distanceToPlayer <= engageRange)
         {
+            // Stop moving and face the player directly to aim
+            agent.isStopped = true;
+            FacePlayer();
+
             fireCooldown -= Time.deltaTime;
             if (fireCooldown <= 0f)
             {
@@ -76,17 +112,14 @@ public class EnemyAI : MonoBehaviour
                 fireCooldown = fireRate;
             }
         }
+        else
+        {
+            agent.isStopped = false;
+        }
     }
+#endregion
 
-    private void MoveTowardPlayer()
-    {
-        Vector3 direction = (player.position - transform.position);
-        direction.y = 0f; // keep movement on the horizontal plane
-        direction.Normalize();
-
-        transform.position += direction * moveSpeed * Time.deltaTime;
-    }
-
+#region Movement and Shooting
     private void FacePlayer()
     {
         Vector3 lookDirection = player.position - transform.position;
@@ -113,11 +146,27 @@ public class EnemyAI : MonoBehaviour
         Vector3 aimDirection = (player.position - firePoint.position).normalized;
         projectile.transform.rotation = Quaternion.LookRotation(aimDirection);
     }
+#endregion
 
-    // Visualize engage range in the Scene view while the enemy is selected
-    private void OnDrawGizmosSelected()
+#region  Health Management
+    public void TakeDamage(float amount)
     {
-        Gizmos.color = Color.red;
-        Gizmos.DrawWireSphere(transform.position, engageRange);
+        health -= amount;
+        if (healthBar != null)
+        {
+            healthBar.value = health;
+        }
+
+        if (health <= 0f)
+        {
+            Die();
+        }
     }
+
+    private void Die()
+    {
+        Destroy(gameObject);
+    }
+#endregion
+
 }
