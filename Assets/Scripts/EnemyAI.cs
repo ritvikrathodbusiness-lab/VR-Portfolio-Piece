@@ -30,6 +30,9 @@ public class EnemyAI : MonoBehaviour
     [Header("Shooting")]
     [Tooltip("Prefab spawned when the enemy fires. Needs an EnemyProjectile component.")]
     public GameObject projectilePrefab;
+    [SerializeField] private Transform gunTrans;
+    
+    [SerializeField] private Animator anim;
 
     [Tooltip("Empty child transform marking where projectiles spawn from (e.g. gun muzzle).")]
     public Transform firePoint;
@@ -102,7 +105,14 @@ public class EnemyAI : MonoBehaviour
         if (distanceToPlayer <= engageRange)
         {
             // Stop moving and face the player directly to aim
-            agent.isStopped = true;
+
+            if(agent.isStopped == false)
+            {
+                agent.isStopped = true;
+                gunTrans.localPosition = new Vector3(-0.0939f, 0.0963f, 0.1088f);
+                gunTrans.localRotation = Quaternion.Euler(-154.933f, -63.444f, 255.3f);
+            }
+            anim.SetBool("isShooting", true);
             FacePlayer();
 
             fireCooldown -= Time.deltaTime;
@@ -114,7 +124,13 @@ public class EnemyAI : MonoBehaviour
         }
         else
         {
-            agent.isStopped = false;
+            if(agent.isStopped == true)
+            {
+                agent.isStopped = false;
+                gunTrans.localPosition = new Vector3(-0.126f, 0.075f, 0.03f);
+                gunTrans.localRotation = Quaternion.Euler(-153.915f, -111.94f, 261.492f);
+            }
+            anim.SetBool("isShooting", false);
         }
     }
 #endregion
@@ -146,6 +162,7 @@ public class EnemyAI : MonoBehaviour
         Vector3 aimDirection = (player.position - firePoint.position).normalized;
         projectile.transform.rotation = Quaternion.LookRotation(aimDirection);
     }
+
 #endregion
 
 #region  Health Management

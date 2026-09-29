@@ -52,16 +52,15 @@ public class Door : MonoBehaviour
 
     void OnTriggerEnter(Collider other)
     {
-        if (other.CompareTag("Player"))
+        if (other.CompareTag("Player") || other.CompareTag("Enemy"))
         {
-            Debug.Log("Player entered door trigger"); 
             canOpen = true;
         }
     }
 
     void OnTriggerExit(Collider other)
     {
-        if (other.CompareTag("Player"))
+        if (other.CompareTag("Player") || other.CompareTag("Enemy"))
         {
             canOpen = false;
         }
