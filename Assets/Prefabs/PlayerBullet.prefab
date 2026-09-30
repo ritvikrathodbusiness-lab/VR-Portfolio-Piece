@@ -127,3 +127,4 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PlayerBullet
   speed: 15
   lifetime: 5
+  impactEffectPrefab: {fileID: 5530595629151767933, guid: 9cb0a63286d3f7441b964f037975ddb2, type: 3}

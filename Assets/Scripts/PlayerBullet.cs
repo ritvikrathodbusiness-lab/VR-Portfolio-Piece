@@ -7,6 +7,7 @@ public class PlayerBullet : MonoBehaviour
 
       [Tooltip("Seconds before the projectile is destroyed if it hits nothing.")]
     public float lifetime = 5f;
+    public GameObject impactEffectPrefab;
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
@@ -24,7 +25,14 @@ public class PlayerBullet : MonoBehaviour
         if (other.CompareTag("Enemy"))
         {
             other.GetComponent<EnemyAI>().TakeDamage(25f);
-            Destroy(gameObject);
+            GetComponent<MeshRenderer>().enabled = false;
+            if (impactEffectPrefab != null)
+            {
+              var spark =  Instantiate(impactEffectPrefab, transform.position, Quaternion.identity);
+              Destroy(spark, 0.5f);
+
+            }
+            Destroy(gameObject, 0.5f);
         }
     }
 }

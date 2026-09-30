@@ -2,15 +2,7 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.AI;
-using TMPro;
 
-/// <summary>
-/// Enemy behavior using NavMeshAgent for pathfinding — moves toward the
-/// player around obstacles/walls instead of straight through them, then
-/// stops and fires once within engage range. Includes health/UI hookup.
-/// Requires: NavMeshAgent component on this object, and a baked NavMesh
-/// in the scene (add a Nav Mesh Surface component to your level and Bake).
-/// </summary>
 [RequireComponent(typeof(Collider))]
 [RequireComponent(typeof(NavMeshAgent))]
 public class EnemyAI : MonoBehaviour
@@ -20,44 +12,51 @@ public class EnemyAI : MonoBehaviour
     [Tooltip("Distance at which the enemy stops advancing and starts shooting.")]
     public float engageRange = 8f;
 
-    [Tooltip("How often the agent recalculates its path to the player, in seconds. " +
-             "Lower = more responsive but more expensive.")]
+    [Tooltip("How often the agent recalculates its path to the player, in seconds.")]
     public float pathUpdateInterval = 0.2f;
 
     [Tooltip("How fast the enemy rotates to face the player once in engage range, in degrees/second.")]
     public float turnSpeed = 180f;
 
     [Header("Shooting")]
-    [Tooltip("Prefab spawned when the enemy fires. Needs an EnemyProjectile component.")]
     public GameObject projectilePrefab;
     [SerializeField] private Transform gunTrans;
-    
     [SerializeField] private Animator anim;
-
-    [Tooltip("Empty child transform marking where projectiles spawn from (e.g. gun muzzle).")]
     public Transform firePoint;
-
-    [Tooltip("Seconds between shots while in engage range.")]
     public float fireRate = 1.5f;
 
     [Header("Player Reference")]
-    [Tooltip("Leave empty to auto-find the object tagged 'Player' at Start.")]
     public Transform player;
 
-    [Header("Health")]
+    [Header("Health & UI")]
     public float health = 100f;
-
-    [SerializeField] Slider healthBar;
+    [SerializeField] private Slider healthBar;
+    [SerializeField] private GameObject healthBarCanvas; // Drag the world-space UI Canvas here to hide it on death
 
     private NavMeshAgent agent;
+    private Collider mainCollider;
+    private Rigidbody mainRigidbody;
     private float fireCooldown;
     private float pathUpdateCooldown;
+
+    private Rigidbody[] ragdollRigidbodies;
+    private Collider[] ragdollColliders;
+    private bool isDead = false;
     #endregion
 
-#region Unity Lifecycle
+    #region Unity Lifecycle
     private void Awake()
     {
         agent = GetComponent<NavMeshAgent>();
+        mainCollider = GetComponent<Collider>();
+        mainRigidbody = GetComponent<Rigidbody>();
+
+        // Cache all child Rigidbodies and Colliders (excluding the root/main components)
+        ragdollRigidbodies = GetComponentsInChildren<Rigidbody>();
+        ragdollColliders = GetComponentsInChildren<Collider>();
+
+        // Ensure ragdoll starts disabled while alive
+        SetRagdollState(false);
     }
 
     private void Start()
@@ -71,8 +70,7 @@ public class EnemyAI : MonoBehaviour
             }
             else
             {
-                Debug.LogWarning($"{name}: No object tagged 'Player' found in scene. " +
-                                  "Tag your XR player reference object as 'Player'.");
+                Debug.LogWarning($"{name}: No object tagged 'Player' found in scene.");
             }
         }
 
@@ -82,19 +80,15 @@ public class EnemyAI : MonoBehaviour
             healthBar.value = health;
         }
 
-        // Let the agent's stopping distance match engage range so it
-        // naturally halts at the right spot instead of overshooting.
         agent.stoppingDistance = engageRange;
     }
 
     private void Update()
     {
-        if (player == null || agent == null) return;
+        if (isDead || player == null || agent == null) return;
 
         float distanceToPlayer = Vector3.Distance(transform.position, player.position);
 
-        // Re-path periodically rather than every single frame — cheaper,
-        // and the player rarely moves fast enough to need per-frame updates.
         pathUpdateCooldown -= Time.deltaTime;
         if (pathUpdateCooldown <= 0f)
         {
@@ -104,15 +98,17 @@ public class EnemyAI : MonoBehaviour
 
         if (distanceToPlayer <= engageRange)
         {
-            // Stop moving and face the player directly to aim
-
-            if(agent.isStopped == false)
+            if (!agent.isStopped)
             {
                 agent.isStopped = true;
-                gunTrans.localPosition = new Vector3(-0.0939f, 0.0963f, 0.1088f);
-                gunTrans.localRotation = Quaternion.Euler(-154.933f, -63.444f, 255.3f);
+                if (gunTrans != null)
+                {
+                    gunTrans.localPosition = new Vector3(-0.0939f, 0.0963f, 0.1088f);
+                    gunTrans.localRotation = Quaternion.Euler(-154.933f, -63.444f, 255.3f);
+                }
             }
-            anim.SetBool("isShooting", true);
+
+            if (anim != null) anim.SetBool("isShooting", true);
             FacePlayer();
 
             fireCooldown -= Time.deltaTime;
@@ -124,22 +120,26 @@ public class EnemyAI : MonoBehaviour
         }
         else
         {
-            if(agent.isStopped == true)
+            if (agent.isStopped)
             {
                 agent.isStopped = false;
-                gunTrans.localPosition = new Vector3(-0.126f, 0.075f, 0.03f);
-                gunTrans.localRotation = Quaternion.Euler(-153.915f, -111.94f, 261.492f);
+                if (gunTrans != null)
+                {
+                    gunTrans.localPosition = new Vector3(-0.126f, 0.075f, 0.03f);
+                    gunTrans.localRotation = Quaternion.Euler(-153.915f, -111.94f, 261.492f);
+                }
             }
-            anim.SetBool("isShooting", false);
+
+            if (anim != null) anim.SetBool("isShooting", false);
         }
     }
-#endregion
+    #endregion
 
-#region Movement and Shooting
+    #region Movement and Shooting
     private void FacePlayer()
     {
         Vector3 lookDirection = player.position - transform.position;
-        lookDirection.y = 0f; // don't tilt up/down toward the player's head height
+        lookDirection.y = 0f;
 
         if (lookDirection.sqrMagnitude < 0.0001f) return;
 
@@ -149,25 +149,19 @@ public class EnemyAI : MonoBehaviour
 
     private void Shoot()
     {
-        if (projectilePrefab == null || firePoint == null)
-        {
-            Debug.LogWarning($"{name}: Missing projectilePrefab or firePoint, can't shoot.");
-            return;
-        }
+        if (projectilePrefab == null || firePoint == null) return;
 
         GameObject projectile = Instantiate(projectilePrefab, firePoint.position, firePoint.rotation);
-
-        // Make sure the projectile actually points at the player, not just
-        // wherever firePoint happens to be rotated.
         Vector3 aimDirection = (player.position - firePoint.position).normalized;
         projectile.transform.rotation = Quaternion.LookRotation(aimDirection);
     }
+    #endregion
 
-#endregion
-
-#region  Health Management
+    #region Health Management & Ragdoll
     public void TakeDamage(float amount)
     {
+        if (isDead) return;
+
         health -= amount;
         if (healthBar != null)
         {
@@ -180,10 +174,52 @@ public class EnemyAI : MonoBehaviour
         }
     }
 
+    private void SetRagdollState(bool active)
+    {
+        foreach (Rigidbody rb in ragdollRigidbodies)
+        {
+            if (rb != mainRigidbody)
+            {
+                rb.isKinematic = !active;
+            }
+        }
+
+        foreach (Collider col in ragdollColliders)
+        {
+            if (col != mainCollider)
+            {
+                col.enabled = active;
+            }
+        }
+    }
+
     private void Die()
     {
-        Destroy(gameObject);
-    }
-#endregion
+        isDead = true;
 
+        // 1. Disable Animator & Agent components
+        if (anim != null) anim.enabled = false;
+        if (agent != null) agent.enabled = false;
+
+        // 2. Disable root capsule collider & main rigidbody
+        if (mainCollider != null) mainCollider.enabled = false;
+        if (mainRigidbody != null) mainRigidbody.isKinematic = true;
+
+        // 3. Enable limb Ragdoll physics
+        SetRagdollState(true);
+
+        // 4. Hide Healthbar UI
+        if (healthBarCanvas != null)
+        {
+            healthBarCanvas.SetActive(false);
+        }
+        else if (healthBar != null)
+        {
+            healthBar.gameObject.SetActive(false);
+        }
+
+        // Optional: Destroy corpse after 10 seconds to save performance on Quest
+        Destroy(gameObject, 10f);
+    }
+    #endregion
 }
