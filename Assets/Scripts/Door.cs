@@ -16,6 +16,7 @@ public class Door : MonoBehaviour
     [SerializeField] private Transform doorLeftTransform;
     [SerializeField] private Transform doorRightTransform;
 
+    public GameObject enemies;
     bool canOpen = false;
     Vector3 doorLeftClosedPos;
     Vector3 doorRightClosedPos;
@@ -55,6 +56,7 @@ public class Door : MonoBehaviour
         if (other.CompareTag("Player") || other.CompareTag("Enemy"))
         {
             canOpen = true;
+            enemies.SetActive(true);
         }
     }
 

@@ -12,10 +12,16 @@ public class EnemyAI : MonoBehaviour
     [Tooltip("Distance at which the enemy stops advancing and starts shooting.")]
     public float engageRange = 8f;
 
+    [Tooltip("If true, this enemy never moves toward the player — it holds " +
+             "its spot and only shoots when the player is within engage range. " +
+             "Toggle this in the Inspector, or call SetStationary() at runtime.")]
+    public bool stationaryMode = false;
+
     [Tooltip("How often the agent recalculates its path to the player, in seconds.")]
     public float pathUpdateInterval = 0.2f;
 
-    [Tooltip("How fast the enemy rotates to face the player once in engage range, in degrees/second.")]
+    [Tooltip("How fast the enemy rotates to face the player, in degrees/second. " +
+             "Applies at all times now, not just while stopped.")]
     public float turnSpeed = 180f;
 
     [Header("Shooting")]
@@ -38,6 +44,7 @@ public class EnemyAI : MonoBehaviour
     private Rigidbody mainRigidbody;
     private float fireCooldown;
     private float pathUpdateCooldown;
+    private bool wasEngaging = false; // tracks previous frame's engage state so pose-swap only fires on transitions
 
     private Rigidbody[] ragdollRigidbodies;
     private Collider[] ragdollColliders;
@@ -50,6 +57,11 @@ public class EnemyAI : MonoBehaviour
         agent = GetComponent<NavMeshAgent>();
         mainCollider = GetComponent<Collider>();
         mainRigidbody = GetComponent<Rigidbody>();
+
+        // We drive facing manually every frame now (FacePlayer), so stop the
+        // agent from also trying to rotate the transform itself — otherwise
+        // the two fight over rotation control.
+        agent.updateRotation = false;
 
         // Cache all child Rigidbodies and Colliders (excluding the root/main components)
         ragdollRigidbodies = GetComponentsInChildren<Rigidbody>();
@@ -88,49 +100,49 @@ public class EnemyAI : MonoBehaviour
         if (isDead || player == null || agent == null) return;
 
         float distanceToPlayer = Vector3.Distance(transform.position, player.position);
+        bool inEngageRange = distanceToPlayer <= engageRange;
 
-        pathUpdateCooldown -= Time.deltaTime;
-        if (pathUpdateCooldown <= 0f)
+        // Look at the player every frame, regardless of movement/shoot state.
+        FacePlayer();
+
+        if (stationaryMode)
         {
-            agent.SetDestination(player.position);
-            pathUpdateCooldown = pathUpdateInterval;
+            // Never path toward the player — just hold position.
+            if (!agent.isStopped) agent.isStopped = true;
         }
-
-        if (distanceToPlayer <= engageRange)
+        else
         {
-            if (!agent.isStopped)
+            agent.isStopped = inEngageRange;
+
+            if (!inEngageRange)
             {
-                agent.isStopped = true;
-                if (gunTrans != null)
+                pathUpdateCooldown -= Time.deltaTime;
+                if (pathUpdateCooldown <= 0f)
                 {
-                    gunTrans.localPosition = new Vector3(-0.0939f, 0.0963f, 0.1088f);
-                    gunTrans.localRotation = Quaternion.Euler(-154.933f, -63.444f, 255.3f);
+                    agent.SetDestination(player.position);
+                    pathUpdateCooldown = pathUpdateInterval;
                 }
             }
+        }
 
-            if (anim != null) anim.SetBool("isShooting", true);
-            FacePlayer();
+        // Fire the gun-pose swap and shooting anim only on state transitions,
+        // same behavior whether the enemy walked into range or was always stationary.
+        if (inEngageRange != wasEngaging)
+        {
+            SwapGunPose(inEngageRange);
+            wasEngaging = inEngageRange;
+        }
 
+        if (anim != null) anim.SetBool("isShooting", inEngageRange);
+
+        if (inEngageRange)
+        {
             fireCooldown -= Time.deltaTime;
             if (fireCooldown <= 0f)
             {
                 Shoot();
                 fireCooldown = fireRate;
             }
-        }
-        else
-        {
-            if (agent.isStopped)
-            {
-                agent.isStopped = false;
-                if (gunTrans != null)
-                {
-                    gunTrans.localPosition = new Vector3(-0.126f, 0.075f, 0.03f);
-                    gunTrans.localRotation = Quaternion.Euler(-153.915f, -111.94f, 261.492f);
-                }
-            }
-
-            if (anim != null) anim.SetBool("isShooting", false);
         }
     }
     #endregion
@@ -147,6 +159,22 @@ public class EnemyAI : MonoBehaviour
         transform.rotation = Quaternion.RotateTowards(transform.rotation, targetRotation, turnSpeed * Time.deltaTime);
     }
 
+    private void SwapGunPose(bool aiming)
+    {
+        if (gunTrans == null) return;
+
+        if (aiming)
+        {
+            gunTrans.localPosition = new Vector3(-0.0939f, 0.0963f, 0.1088f);
+            gunTrans.localRotation = Quaternion.Euler(-154.933f, -63.444f, 255.3f);
+        }
+        else
+        {
+            gunTrans.localPosition = new Vector3(-0.126f, 0.075f, 0.03f);
+            gunTrans.localRotation = Quaternion.Euler(-153.915f, -111.94f, 261.492f);
+        }
+    }
+
     private void Shoot()
     {
         if (projectilePrefab == null || firePoint == null) return;
@@ -154,6 +182,15 @@ public class EnemyAI : MonoBehaviour
         GameObject projectile = Instantiate(projectilePrefab, firePoint.position, firePoint.rotation);
         Vector3 aimDirection = (player.position - firePoint.position).normalized;
         projectile.transform.rotation = Quaternion.LookRotation(aimDirection);
+    }
+
+    /// <summary>
+    /// Toggle this enemy between "chase the player" and "hold position and shoot"
+    /// at runtime — hook this up to a trigger volume, wave manager, UnityEvent, etc.
+    /// </summary>
+    public void SetStationary(bool stationary)
+    {
+        stationaryMode = stationary;
     }
     #endregion
 

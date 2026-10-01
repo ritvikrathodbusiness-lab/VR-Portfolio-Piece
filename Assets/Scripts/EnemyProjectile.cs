@@ -31,9 +31,7 @@ public class EnemyProjectile : MonoBehaviour
     {
         if (other.CompareTag("Player"))
         {
-            // TODO: replace with a call into your player health system once it exists,
-            // e.g. other.GetComponent<PlayerHealth>()?.TakeDamage(damage);
-            Debug.Log($"Player hit for {damage} damage.");
+            other.GetComponent<Player>()?.TakeDamage(damage);
             Destroy(gameObject);
             return;
         }
