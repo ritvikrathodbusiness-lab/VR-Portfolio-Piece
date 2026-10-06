@@ -12,6 +12,10 @@ public class SmallRobot : MonoBehaviour
     public float pathUpdateInterval = 0.2f;
     public float turnSpeed = 180f;
 
+    public Slider healthBar;
+
+    float health = 100f;
+    float currentHealth;
     public Animator anim;
 
     [Header("Jump Attack")]
@@ -36,6 +40,10 @@ public class SmallRobot : MonoBehaviour
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
+        healthBar.maxValue = health;
+        healthBar.value = health;
+        currentHealth = health;
+
         agent = GetComponent<NavMeshAgent>();
 
         if (player == null)
@@ -155,7 +163,7 @@ public class SmallRobot : MonoBehaviour
             }
         }
 
-        Destroy(gameObject);
+        Die();
     }
 
     private void OnDrawGizmosSelected()
@@ -165,5 +173,28 @@ public class SmallRobot : MonoBehaviour
 
         Gizmos.color = Color.yellow;
         Gizmos.DrawWireSphere(transform.position, explosionRadius);
+    }
+
+    public void TakeDamage(float damage)
+    {
+        currentHealth -= damage;
+        healthBar.value = currentHealth;
+        if (currentHealth <= 0f)
+        {
+            Explode();
+            Die();
+        }
+    }
+
+    void Die()
+    {
+        StartCoroutine(CheckWinCor(0.1f)); // Delay to ensure the enemy is destroyed before checking win condition
+        Destroy(gameObject);
+    }
+
+    IEnumerator CheckWinCor(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        GameManager.Instance.CheckWin();
     }
 }

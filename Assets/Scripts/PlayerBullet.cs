@@ -24,7 +24,15 @@ public class PlayerBullet : MonoBehaviour
     {
         if (other.CompareTag("Enemy"))
         {
-            other.GetComponent<EnemyAI>().TakeDamage(25f);
+            if(other.GetComponent<EnemyAI>() != null)
+            {
+                other.GetComponent<EnemyAI>().TakeDamage(50);
+
+            }else if(other.GetComponent<SmallRobot>() != null)
+            {
+                other.GetComponent<SmallRobot>().TakeDamage(50);
+            }
+
             GetComponent<MeshRenderer>().enabled = false;
             if (impactEffectPrefab != null)
             {
@@ -32,7 +40,8 @@ public class PlayerBullet : MonoBehaviour
               Destroy(spark, 0.5f);
 
             }
-            Destroy(gameObject, 0.5f);
         }
+        
+        Destroy(gameObject, 0.5f);
     }
 }

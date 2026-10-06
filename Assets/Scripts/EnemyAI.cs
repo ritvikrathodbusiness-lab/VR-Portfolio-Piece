@@ -12,6 +12,10 @@ public class EnemyAI : MonoBehaviour
     [Tooltip("Distance at which the enemy stops advancing and starts shooting.")]
     public float engageRange = 8f;
 
+    [Tooltip("Max vertical (Y) distance allowed to engage the player. " +
+             "Prevents enemies on different floors from shooting through them.")]
+    public float maxYDifference = 2f;
+
     [Tooltip("If true, this enemy never moves toward the player — it holds " +
              "its spot and only shoots when the player is within engage range. " +
              "Toggle this in the Inspector, or call SetStationary() at runtime.")]
@@ -37,14 +41,14 @@ public class EnemyAI : MonoBehaviour
     [Header("Health & UI")]
     public float health = 100f;
     [SerializeField] private Slider healthBar;
-    [SerializeField] private GameObject healthBarCanvas; // Drag the world-space UI Canvas here to hide it on death
+    [SerializeField] private GameObject healthBarCanvas;
 
     private NavMeshAgent agent;
     private Collider mainCollider;
     private Rigidbody mainRigidbody;
     private float fireCooldown;
     private float pathUpdateCooldown;
-    private bool wasEngaging = false; // tracks previous frame's engage state so pose-swap only fires on transitions
+    private bool wasEngaging = false;
 
     private Rigidbody[] ragdollRigidbodies;
     private Collider[] ragdollColliders;
@@ -58,16 +62,11 @@ public class EnemyAI : MonoBehaviour
         mainCollider = GetComponent<Collider>();
         mainRigidbody = GetComponent<Rigidbody>();
 
-        // We drive facing manually every frame now (FacePlayer), so stop the
-        // agent from also trying to rotate the transform itself — otherwise
-        // the two fight over rotation control.
         agent.updateRotation = false;
 
-        // Cache all child Rigidbodies and Colliders (excluding the root/main components)
         ragdollRigidbodies = GetComponentsInChildren<Rigidbody>();
         ragdollColliders = GetComponentsInChildren<Collider>();
 
-        // Ensure ragdoll starts disabled while alive
         SetRagdollState(false);
     }
 
@@ -100,14 +99,13 @@ public class EnemyAI : MonoBehaviour
         if (isDead || player == null || agent == null) return;
 
         float distanceToPlayer = Vector3.Distance(transform.position, player.position);
-        bool inEngageRange = distanceToPlayer <= engageRange;
+        float yDistance = Mathf.Abs(transform.position.y - player.position.y);
+        bool inEngageRange = distanceToPlayer <= engageRange && yDistance <= maxYDifference;
 
-        // Look at the player every frame, regardless of movement/shoot state.
         FacePlayer();
 
         if (stationaryMode)
         {
-            // Never path toward the player — just hold position.
             if (!agent.isStopped) agent.isStopped = true;
         }
         else
@@ -125,8 +123,6 @@ public class EnemyAI : MonoBehaviour
             }
         }
 
-        // Fire the gun-pose swap and shooting anim only on state transitions,
-        // same behavior whether the enemy walked into range or was always stationary.
         if (inEngageRange != wasEngaging)
         {
             SwapGunPose(inEngageRange);
@@ -184,10 +180,6 @@ public class EnemyAI : MonoBehaviour
         projectile.transform.rotation = Quaternion.LookRotation(aimDirection);
     }
 
-    /// <summary>
-    /// Toggle this enemy between "chase the player" and "hold position and shoot"
-    /// at runtime — hook this up to a trigger volume, wave manager, UnityEvent, etc.
-    /// </summary>
     public void SetStationary(bool stationary)
     {
         stationaryMode = stationary;
@@ -234,18 +226,14 @@ public class EnemyAI : MonoBehaviour
     {
         isDead = true;
 
-        // 1. Disable Animator & Agent components
         if (anim != null) anim.enabled = false;
         if (agent != null) agent.enabled = false;
 
-        // 2. Disable root capsule collider & main rigidbody
         if (mainCollider != null) mainCollider.enabled = false;
         if (mainRigidbody != null) mainRigidbody.isKinematic = true;
 
-        // 3. Enable limb Ragdoll physics
         SetRagdollState(true);
 
-        // 4. Hide Healthbar UI
         if (healthBarCanvas != null)
         {
             healthBarCanvas.SetActive(false);
@@ -255,8 +243,14 @@ public class EnemyAI : MonoBehaviour
             healthBar.gameObject.SetActive(false);
         }
 
-        // Optional: Destroy corpse after 10 seconds to save performance on Quest
+        StartCoroutine(CheckWinCor(9.5f));
         Destroy(gameObject, 10f);
+    }
+
+    IEnumerator CheckWinCor(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        GameManager.Instance.CheckWin();
     }
     #endregion
 }

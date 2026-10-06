@@ -824,16 +824,18 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyAI
   engageRange: 5
+  stationaryMode: 0
   pathUpdateInterval: 0.2
   turnSpeed: 180
   projectilePrefab: {fileID: 8512455671398437854, guid: 9d20c0014ad31104995409f6ef564c84, type: 3}
   gunTrans: {fileID: 2189166954665887754}
   anim: {fileID: 5383508021450533348}
   firePoint: {fileID: 9058725315593684163}
-  fireRate: 1.5
+  fireRate: 4.5
   player: {fileID: 0}
   health: 100
   healthBar: {fileID: 6101869725737560143}
+  healthBarCanvas: {fileID: 0}
 --- !u!195 &6946919345026318515
 NavMeshAgent:
   m_ObjectHideFlags: 0

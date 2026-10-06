@@ -29,17 +29,19 @@ public class EnemyProjectile : MonoBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
-        if (other.CompareTag("Player"))
+        if (other.gameObject.CompareTag("Player"))
         {
-            other.GetComponent<Player>()?.TakeDamage(damage);
+            other.gameObject.GetComponent<Player>()?.TakeDamage(damage);
             Destroy(gameObject);
-            return;
         }
-
-        // Ignore other enemies so they don't shoot each other on spawn overlap
-        if (other.CompareTag("Enemy")) return;
-
-        // Hit level geometry or anything else — destroy on impact
-        Destroy(gameObject);
+        else
+        {
+            // Ignore other enemies so they don't shoot each other on spawn overlap
+            if (other.gameObject.tag != "Enemy")
+            {
+                // Hit level geometry or anything else — destroy on impact
+                Destroy(gameObject);
+            }
+        }
     }
 }
