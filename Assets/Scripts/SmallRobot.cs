@@ -3,6 +3,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.AI;
 
+[RequireComponent(typeof(AudioSource))]
 public class SmallRobot : MonoBehaviour
 {
     public Transform player;
@@ -35,6 +36,22 @@ public class SmallRobot : MonoBehaviour
     [Tooltip("Placeholder damage value — hook this into player health once it exists.")]
     public float explosionDamage = 25f;
 
+    [Header("Audio")]
+    [Tooltip("Looping footstep/servo noise played while walking toward the player.")]
+    public AudioClip walkClip;
+
+    [Tooltip("One-shot sound played the instant the robot launches its leap attack.")]
+    public AudioClip jumpClip;
+
+    [Tooltip("One-shot sound played on explosion. Played via PlayClipAtPoint since " +
+             "this object is destroyed right after.")]
+    public AudioClip explodeClip;
+
+    [Range(0f, 1f)] public float walkVolume = 0.6f;
+    [Range(0f, 1f)] public float jumpVolume = 1f;
+    [Range(0f, 1f)] public float explodeVolume = 1f;
+
+    private AudioSource audioSource;
     private bool isJumping = false;
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created
@@ -45,6 +62,10 @@ public class SmallRobot : MonoBehaviour
         currentHealth = health;
 
         agent = GetComponent<NavMeshAgent>();
+
+        audioSource = GetComponent<AudioSource>();
+        audioSource.loop = true;
+        audioSource.playOnAwake = false;
 
         if (player == null)
         {
@@ -83,6 +104,7 @@ public class SmallRobot : MonoBehaviour
             {
                 agent.isStopped = true;
                 anim.SetBool("isAttacking", true);
+                StopWalkAudio();
                 StartCoroutine(LeapAtPlayer());
             }
         }
@@ -93,6 +115,35 @@ public class SmallRobot : MonoBehaviour
                 agent.isStopped = false;
                 anim.SetBool("isAttacking", false);
             }
+
+            UpdateWalkAudio();
+        }
+    }
+
+    private void UpdateWalkAudio()
+    {
+        bool isMoving = agent.enabled && !agent.isStopped && agent.velocity.sqrMagnitude > 0.01f;
+
+        if (isMoving)
+        {
+            if (!audioSource.isPlaying || audioSource.clip != walkClip)
+            {
+                audioSource.clip = walkClip;
+                audioSource.volume = walkVolume;
+                audioSource.Play();
+            }
+        }
+        else
+        {
+            StopWalkAudio();
+        }
+    }
+
+    private void StopWalkAudio()
+    {
+        if (audioSource.isPlaying && audioSource.clip == walkClip)
+        {
+            audioSource.Stop();
         }
     }
 
@@ -110,6 +161,11 @@ public class SmallRobot : MonoBehaviour
     private IEnumerator LeapAtPlayer()
     {
         isJumping = true;
+
+        if (jumpClip != null)
+        {
+            audioSource.PlayOneShot(jumpClip, jumpVolume);
+        }
 
         // Snapshot the target position once at launch, rather than tracking a
         // moving player mid-air — feels more like a committed leap, less like homing.
@@ -150,6 +206,14 @@ public class SmallRobot : MonoBehaviour
         {
           var explosion =  Instantiate(explosionPrefab, transform.position, Quaternion.identity);
           Destroy(explosion, 1.5f);
+        }
+
+        // PlayClipAtPoint spawns a temporary, self-destroying AudioSource at this
+        // position and plays the clip — works even though this GameObject is
+        // about to be destroyed, since the sound doesn't depend on it surviving.
+        if (explodeClip != null)
+        {
+            AudioSource.PlayClipAtPoint(explodeClip, transform.position, explodeVolume);
         }
 
         Collider[] hits = Physics.OverlapSphere(transform.position, explosionRadius);

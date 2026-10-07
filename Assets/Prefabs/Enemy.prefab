@@ -824,6 +824,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyAI
   engageRange: 5
+  maxYDifference: 2
   stationaryMode: 0
   pathUpdateInterval: 0.2
   turnSpeed: 180
@@ -836,6 +837,16 @@ MonoBehaviour:
   health: 100
   healthBar: {fileID: 6101869725737560143}
   healthBarCanvas: {fileID: 0}
+  walkClip: {fileID: 8300000, guid: 687120477e5eea14cacb39c57137e0cf, type: 3}
+  shootClip: {fileID: 8300000, guid: a26e5f9788a0b0741b86571f90e579c9, type: 3}
+  hitClip: {fileID: 8300000, guid: a0b0d484638d43d4ead8196ae5d693ee, type: 3}
+  dieClip: {fileID: 8300000, guid: a6ed30b655e1e1e44b0832205f87ad4c, type: 3}
+  walkVolume: 0.6
+  shootVolume: 0.8
+  hitVolume: 0.8
+  dieVolume: 1
+  minAudioDistance: 1
+  maxAudioDistance: 35
 --- !u!195 &6946919345026318515
 NavMeshAgent:
   m_ObjectHideFlags: 0

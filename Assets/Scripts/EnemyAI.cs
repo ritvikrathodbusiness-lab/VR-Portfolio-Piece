@@ -5,6 +5,7 @@ using UnityEngine.AI;
 
 [RequireComponent(typeof(Collider))]
 [RequireComponent(typeof(NavMeshAgent))]
+[RequireComponent(typeof(AudioSource))]
 public class EnemyAI : MonoBehaviour
 {
     #region Variables
@@ -43,9 +44,34 @@ public class EnemyAI : MonoBehaviour
     [SerializeField] private Slider healthBar;
     [SerializeField] private GameObject healthBarCanvas;
 
+    [Header("Audio")]
+    [Tooltip("Looping footstep/movement noise played while walking toward the player.")]
+    public AudioClip walkClip;
+
+    [Tooltip("One-shot sound played each time this enemy fires.")]
+    public AudioClip shootClip;
+
+    [Tooltip("One-shot sound played when this enemy takes damage.")]
+    public AudioClip hitClip;
+
+    [Tooltip("One-shot sound played on death.")]
+    public AudioClip dieClip;
+
+    [Range(0f, 1f)] public float walkVolume = 0.6f;
+    [Range(0f, 1f)] public float shootVolume = 0.8f;
+    [Range(0f, 1f)] public float hitVolume = 0.8f;
+    [Range(0f, 1f)] public float dieVolume = 1f;
+
+    [Header("3D Audio Falloff")]
+    [Tooltip("Distance within which audio plays at full volume.")]
+    public float minAudioDistance = 1f;
+    [Tooltip("Distance beyond which audio is inaudible.")]
+    public float maxAudioDistance = 15f;
+
     private NavMeshAgent agent;
     private Collider mainCollider;
     private Rigidbody mainRigidbody;
+    private AudioSource audioSource;
     private float fireCooldown;
     private float pathUpdateCooldown;
     private bool wasEngaging = false;
@@ -61,8 +87,18 @@ public class EnemyAI : MonoBehaviour
         agent = GetComponent<NavMeshAgent>();
         mainCollider = GetComponent<Collider>();
         mainRigidbody = GetComponent<Rigidbody>();
+        audioSource = GetComponent<AudioSource>();
 
         agent.updateRotation = false;
+
+        // Make this a proper 3D positional sound source so volume falls off
+        // with distance instead of playing at full volume everywhere.
+        audioSource.spatialBlend = 1f;
+        audioSource.rolloffMode = AudioRolloffMode.Logarithmic;
+        audioSource.minDistance = minAudioDistance;
+        audioSource.maxDistance = maxAudioDistance;
+        audioSource.loop = true;
+        audioSource.playOnAwake = false;
 
         ragdollRigidbodies = GetComponentsInChildren<Rigidbody>();
         ragdollColliders = GetComponentsInChildren<Collider>();
@@ -140,6 +176,37 @@ public class EnemyAI : MonoBehaviour
                 fireCooldown = fireRate;
             }
         }
+
+        UpdateWalkAudio();
+    }
+    #endregion
+
+    #region Audio
+    private void UpdateWalkAudio()
+    {
+        bool isMoving = !stationaryMode && agent.enabled && !agent.isStopped && agent.velocity.sqrMagnitude > 0.01f;
+
+        if (isMoving)
+        {
+            if (!audioSource.isPlaying || audioSource.clip != walkClip)
+            {
+                audioSource.clip = walkClip;
+                audioSource.volume = walkVolume;
+                audioSource.Play();
+            }
+        }
+        else
+        {
+            StopWalkAudio();
+        }
+    }
+
+    private void StopWalkAudio()
+    {
+        if (audioSource.isPlaying && audioSource.clip == walkClip)
+        {
+            audioSource.Stop();
+        }
     }
     #endregion
 
@@ -178,6 +245,11 @@ public class EnemyAI : MonoBehaviour
         GameObject projectile = Instantiate(projectilePrefab, firePoint.position, firePoint.rotation);
         Vector3 aimDirection = (player.position - firePoint.position).normalized;
         projectile.transform.rotation = Quaternion.LookRotation(aimDirection);
+
+        if (shootClip != null)
+        {
+            audioSource.PlayOneShot(shootClip, shootVolume);
+        }
     }
 
     public void SetStationary(bool stationary)
@@ -195,6 +267,11 @@ public class EnemyAI : MonoBehaviour
         if (healthBar != null)
         {
             healthBar.value = health;
+        }
+
+        if (hitClip != null)
+        {
+            audioSource.PlayOneShot(hitClip, hitVolume);
         }
 
         if (health <= 0f)
@@ -233,6 +310,15 @@ public class EnemyAI : MonoBehaviour
         if (mainRigidbody != null) mainRigidbody.isKinematic = true;
 
         SetRagdollState(true);
+
+        StopWalkAudio();
+        if (dieClip != null)
+        {
+            // The object sticks around for 10s before Destroy below, so the
+            // normal AudioSource (not PlayClipAtPoint) has plenty of time to
+            // finish playing — no need for the destroyed-object workaround here.
+            audioSource.PlayOneShot(dieClip, dieVolume);
+        }
 
         if (healthBarCanvas != null)
         {
